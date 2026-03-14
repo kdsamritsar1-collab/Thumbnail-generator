@@ -7,11 +7,12 @@ from io import BytesIO
 
 st.set_page_config(page_title="Ruhani Studio", page_icon="🎨", layout="centered")
 
+# Session State
 if "last_image" not in st.session_state: st.session_state.last_image = None
 if "last_prompt" not in st.session_state: st.session_state.last_prompt = ""
 if "last_text" not in st.session_state: st.session_state.last_text = ""
 
-st.title("🎨 Ruhani Creative Studio v4.0")
+st.title("🎨 Ruhani Creative Studio v4.1")
 
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -40,7 +41,7 @@ with tab1:
         ratio = st.selectbox("Ratio", ["16:9", "1:1", "9:16"])
         ref_file = st.file_uploader("Upload Ref Image", type=['jpg', 'png'])
 
-    if st.button("✨ Generate Thumbnail"):
+    if st.button("✨ Generate"):
         if desc:
             with st.spinner("AI is painting..."):
                 final_ref = None
@@ -48,22 +49,25 @@ with tab1:
                 elif ref_file: final_ref = Image.open(ref_file)
 
                 st.session_state.last_prompt, st.session_state.last_text = desc, text
-                
                 result = engine.generate_nano_image(API_KEY, pm.get_thumbnail_prompt(desc, text, style), ratio, final_ref)
                 
                 if isinstance(result, bytes):
                     try:
+                        # Validation before saving
                         img_obj = Image.open(BytesIO(result))
                         st.session_state.last_image = img_obj
                         st.image(result, use_container_width=True)
-                        st.download_button("📥 Download PNG", result, "thumbnail.png", "image/png")
+                        st.download_button("📥 Download", result, "thumb.png", "image/png")
                         st.rerun()
-                    except:
-                        st.error("Received bytes but they are not a valid image format.")
-                elif result == "CREDIT_EXHAUSTED": st.error("Quota Over!")
-                else: st.error(result)
+                    except Exception as e:
+                        st.error(f"Image Error: AI provided bytes but format is invalid. ({e})")
+                elif "AI_TEXT_RESPONSE" in str(result):
+                    st.warning("AI sent text instead of image:")
+                    st.info(result.replace("AI_TEXT_RESPONSE:", ""))
+                else:
+                    st.error(result)
 
-    # --- Correction Feature ---
+    # Correction Feature
     if st.session_state.last_image:
         st.markdown("---")
         st.subheader("🔧 Correct Text")
@@ -84,4 +88,4 @@ with tab2:
         res = engine.generate_nano_image(API_KEY, pm.get_distrokid_prompt(d_desc, "Spiritual"), "1:1")
         if isinstance(res, bytes):
             st.image(res, use_container_width=True)
-            st.download_button("Download PNG", res, "cover.png")
+            st.download_button("Download", res, "cover.png")
