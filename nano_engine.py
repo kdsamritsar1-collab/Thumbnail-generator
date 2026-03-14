@@ -4,56 +4,40 @@ def generate_nano_image(api_key, refined_prompt, aspect_ratio, reference_img=Non
     try:
         genai.configure(api_key=api_key)
         
-        # --- AUTO-DETECT LOGIC START ---
-        # Sabhi available models ki list nikalna
+        # --- AUTO-DETECT WORKING MODEL ---
         models = genai.list_models()
+        image_models = [m.name for m in models if 'generateContent' in m.supported_generation_methods and ('image' in m.name.lower() or 'flash' in m.name.lower())]
         
-        # Hume wo model chahiye jo 'generateContent' support kare aur jiske naam mein 'flash' ya 'image' ho
-        # Nano Banana 2 (Gemini 3 Flash Image) ke liye priority check
-        image_models = [
-            m.name for m in models 
-            if 'generateContent' in m.supported_generation_methods 
-            and ('image' in m.name.lower() or 'flash' in m.name.lower())
-        ]
+        # Priority: Nano Banana 2 (Gemini 3 Flash Image) then Fallback
+        priority_order = ['models/gemini-3-flash-image', 'models/gemini-1.5-flash']
+        selected_model = next((m for m in priority_order if m in image_models), image_models[0] if image_models else None)
         
-        # Priority list: Jo model sabse naya aur best hai
-        selected_model = None
-        priority_order = [
-            'models/gemini-3-flash-image',
-            'models/gemini-1.5-flash',
-            'models/gemini-pro-vision'
-        ]
-        
-        for target in priority_order:
-            if target in image_models:
-                selected_model = target
-                break
-        
-        # Agar priority wala nahi mila, toh pehla suitable model le lo
-        if not selected_model and image_models:
-            selected_model = image_models[0]
-            
         if not selected_model:
-            return "Engine Error: No suitable Image model found for this API Key."
-        # --- AUTO-DETECT LOGIC END ---
+            return "Engine Error: No suitable AI model found."
 
         model = genai.GenerativeModel(selected_model)
         
-        # Aspect Ratio ko instruction mein daalna
-        final_instruction = f"{refined_prompt}. Aspect Ratio: {aspect_ratio}."
+        # Building Instruction
+        final_prompt = f"{refined_prompt}. Aspect Ratio: {aspect_ratio}."
+        content = [final_prompt]
         
-        content = [final_instruction]
         if reference_img:
             content.append(reference_img)
-            content.append("Use the style of this reference, but ignore its text.")
+            content.append("IMPORTANT: Use the style/colors of this reference, but COMPLETELY IGNORE all text inside it.")
 
-        # Simple call without complex config to avoid 'Unknown field' errors
         response = model.generate_content(content)
         
-        return response.candidates[0].content.parts[0].inline_data.data
-    
+        # --- DATA VALIDATION (Prevents PIL Errors) ---
+        try:
+            part = response.candidates[0].content.parts[0]
+            if hasattr(part, 'inline_data'):
+                return part.inline_data.data
+            else:
+                return f"AI Refusal: {part.text}"
+        except:
+            return "AI Error: Model failed to provide valid image data."
+
     except Exception as e:
-        error_msg = str(e).lower()
-        if "429" in error_msg or "quota" in error_msg:
-            return "CREDIT_EXHAUSTED"
+        msg = str(e).lower()
+        if "429" in msg or "quota" in msg: return "CREDIT_EXHAUSTED"
         return f"Engine Error: {e}"
