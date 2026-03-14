@@ -21,21 +21,14 @@ def generate_nano_image(api_key, refined_prompt, aspect_ratio, reference_img=Non
 
         response = model.generate_content(content)
         
-        # --- Critical Fix: Check for Image Data vs Text ---
+       # --- FIXED RESPONSE LOGIC ---
         try:
-            # Check if candidates exist and have parts
-            if response.candidates and response.candidates[0].content.parts:
-                part = response.candidates[0].content.parts[0]
-                if hasattr(part, 'inline_data') and part.inline_data:
-                    return part.inline_data.data
-                else:
-                    return f"AI Refusal: {part.text if hasattr(part, 'text') else 'Safety Blocked'}"
+            # Check if the AI actually generated an image
+            if hasattr(response.candidates[0].content.parts[0], 'inline_data'):
+                return response.candidates[0].content.parts[0].inline_data.data
             else:
-                return "AI Error: Empty response from model."
-        except Exception as parse_err:
-            return f"Parsing Error: {parse_err}"
+                # Agar AI ne sirf text (description) likh kar bhej diya hai
+                return "AI Error: The model provided a text description instead of an actual image. This usually happens when the specific Image Model is not active on your API key."
+        except Exception as e:
+            return f"Parsing Error: AI failed to generate image data. {e}"
 
-    except Exception as e:
-        msg = str(e).lower()
-        if "429" in msg or "quota" in msg: return "CREDIT_EXHAUSTED"
-        return f"Engine Error: {e}"
